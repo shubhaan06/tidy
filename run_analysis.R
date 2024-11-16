@@ -1,49 +1,68 @@
-file_url = "https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip"
-download.file(file_url, destfile = "dataset.zip")
-unzip("dataset.zip")
+library(dplyr)
+library(tidyr)
 
-features = read.table("UCI HAR Dataset/features.txt", col.names = c("index", "feature"))
-activity_labels = read.table("UCI HAR Dataset/activity_labels.txt", col.names = c("id", "activity"))
+download_dataset <- function() {
+  if (!file.exists("UCI HAR Dataset")) {
+    fileUrl <- "https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip"
+    download.file(fileUrl, destfile = "dataset.zip")
+    unzip("dataset.zip")
+  }
+}
 
-x_train = read.table("UCI HAR Dataset/train/X_train.txt")
-y_train = read.table("UCI HAR Dataset/train/y_train.txt")
-subject_train = read.table("UCI HAR Dataset/train/subject_train.txt")
+# Main function
+run_analysis <- function() {
+  
+  download_dataset()
+  
+  # Read feature names and activity labels
+  features <- read.table("UCI HAR Dataset/features.txt", col.names = c("n", "functions"))
+  activities <- read.table("UCI HAR Dataset/activity_labels.txt", col.names = c("code", "activity"))
+  
+  # Read training data
+  subject_train <- read.table("UCI HAR Dataset/train/subject_train.txt", col.names = "subject")
+  x_train <- read.table("UCI HAR Dataset/train/X_train.txt", col.names = features$functions)
+  y_train <- read.table("UCI HAR Dataset/train/y_train.txt", col.names = "code")
+  
+  # Read test data
+  subject_test <- read.table("UCI HAR Dataset/test/subject_test.txt", col.names = "subject")
+  x_test <- read.table("UCI HAR Dataset/test/X_test.txt", col.names = features$functions)
+  y_test <- read.table("UCI HAR Dataset/test/y_test.txt", col.names = "code")
+  
+  
+  # Merge training and test sets
+  X <- rbind(x_train, x_test)
+  Y <- rbind(y_train, y_test)
+  Subject <- rbind(subject_train, subject_test)
+  merged_data <- cbind(Subject, Y, X)
+  
+  
+  
+  # Extract mean and sd
+  tidy_data <- merged_data %>%
+    select(subject, code,
+           contains("mean", ignore.case = TRUE),
+           contains("std", ignore.case = TRUE))
+  
+  tidy_data$code <- activities[tidy_data$code, 2]
+  
+  # Labels
+  names(tidy_data)[2] = "activity"
+  names(tidy_data) <- gsub("^t", "Time", names(tidy_data))
+  names(tidy_data) <- gsub("^f", "Frequency", names(tidy_data))
+  names(tidy_data) <- gsub("Acc", "Accelerometer", names(tidy_data))
+  names(tidy_data) <- gsub("Gyro", "Gyroscope", names(tidy_data))
+  names(tidy_data) <- gsub("Mag", "Magnitude", names(tidy_data))
+  names(tidy_data) <- gsub("BodyBody", "Body", names(tidy_data))
+  
+  # create dataset
+  final_data <- tidy_data %>%
+    group_by(subject, activity) %>%
+    summarise(across(everything(), mean))
+  
+  write.table(final_data, "tidy_data.txt", row.names = FALSE)
+  
+  return(final_data)
+}
 
-x_test = read.table("UCI HAR Dataset/test/X_test.txt")
-y_test = read.table("UCI HAR Dataset/test/y_test.txt")
-subject_test = read.table("UCI HAR Dataset/test/subject_test.txt")
-
-features = read.table('UCI HAR Dataset/features.txt')
-activityLabels = read.table('UCI HAR Dataset/activity_labels.txt')
-
-colnames(x_train) = features[,2]
-colnames(y_train) ="activityId"
-colnames(subject_train) = "subjectId"
-
-colnames(x_test) = features[,2]
-colnames(y_test) = "activityId"
-colnames(subject_test) = "subjectId"
-colnames(activityLabels) = c('activityId','activityType')
-
-mrg_train = cbind(y_train, subject_train, x_train)
-mrg_test = cbind(y_test, subject_test, x_test)
-OneDataSet = rbind(mrg_train, mrg_test)
-
-MrgColNames = colnames(OneDataSet)
-
-mean_and_std = (grepl("activityId" , MrgColNames) | 
-                   grepl("subjectId" , MrgColNames) | 
-                   grepl("mean.." , MrgColNames) | 
-                   grepl("std.." , MrgColNames) 
-)
-
-ExtractMeanAndStd = OneDataSet[ , mean_and_std == TRUE]
-
-DescriptiveActivityNames = merge(ExtractMeanAndStd, activityLabels,
-                                  by='activityId',
-                                  all.x=TRUE)
-
-Tidy_Data = aggregate(. ~subjectId + activityId, DescriptiveActivityNames, mean)
-Tidy_Data = Tidy_Data[order(Tidy_Data$subjectId, Tidy_Data$activityId),]
-
-write.table(Tidy_Data, "Tidy_Data.txt", row.name=FALSE)
+# Execute
+tidy_dataset <- run_analysis()
